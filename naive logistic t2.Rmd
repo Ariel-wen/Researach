@@ -1,0 +1,172 @@
+---
+title: "naive logistic t2"
+author: "Yiwen Peng"
+date: "2024-04-11"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+
+```{r}
+pacman::p_load(tidyverse, lubridate, patchwork, knitr)
+```
+
+```{r}
+matches_df_nl <- readRDS("E:/Ariel/adelaide/research/R/data/cleaned_matches.rds")
+players_df_nl <- readRDS("E:/Ariel/adelaide/research/R/data/players.rds")
+```
+
+
+```{r}
+colnames(matches_df_nl)
+```
+
+
+```{r}
+ #Impute values to replace missing data
+matches_df_nl <- matches_df_nl |>
+  mutate(LPts = replace_na(LPts, 1)) |>
+  mutate(WPts = replace_na(WPts, 1))
+
+## Fitting the model
+# Remove missing data, create new features
+matches_df_nl <- matches_df_nl |>
+  na.omit() |>
+  mutate(higher_rank_won = WRank < LRank) |>
+  mutate(higher_Pts = WPts * (higher_rank_won) +
+           LPts * (1 - higher_rank_won)) |>
+  mutate(lower_Pts = WPts * (1 - higher_rank_won) +
+           LPts * (higher_rank_won))
+
+matches_df_nl <- matches_df_nl |>
+  mutate(diff_WPT = higher_Pts - lower_Pts)
+matches_df_nl
+```
+```{r}
+
+fit_diff <- glm(
+  higher_rank_won ~ diff_WPT + 0,
+  data = matches_df_nl,
+  family = binomial(link = 'logit')
+  # family = binomial(link = 'probit')
+)
+summary(fit_diff)
+
+```
+
+
+```{r}
+val <- function(matches_df){
+  split_time <- dmy("01-01-2017")
+  matches_train_df <- filter(matches_df, Date < split_time)
+  matches_test_df <- filter(matches_df, Date >= split_time)
+  N <- nrow(matches_test_df)
+  
+  preds_elo <- ifelse(matches_test_df$winner_prob_ELO > matches_test_df$loser_prob_ELO, 1, 0)
+  pi_test <- matches_test_df$winner_prob_ELO
+  #accuracy_logistic <- mean(preds_elo == matches_test_df$higher_elo_won)
+  accuracy <- mean(matches_test_df$winner_prob_ELO > matches_test_df$loser_prob_ELO)
+  #w <- matches_test_df$higher_elo_won
+  w<- preds_elo
+  #w <- preds_elo
+  log_loss_logistic <- -1 / N * sum(w * log(pi_test) +
+  (1 - w) * log(1 - pi_test), na.rm = T)
+  calibration_logistic <- sum(pi_test) / sum(w)
+  
+    
+  val <- tibble(model = paste0("Elo_k=",k), pred_acc = accuracy,log_loss = log_loss_logistic, calibration = calibration_logistic)
+  return(val)
+}
+
+```
+
+
+
+```{r}
+
+split_time <- dmy("01-01-2017")
+matches_train_df <- filter(matches_df_nl, Date < split_time)
+matches_test_df <- filter(matches_df_nl, Date >= split_time)
+N <- nrow(matches_df_nl)
+naive_accuracy <- mean(matches_df_nl$higher_rank_won)
+w <- matches_df_nl$higher_rank_won
+# For this model, pi is constant and equal to the accuracy we have already calculated.
+pi_naive <- naive_accuracy
+log_loss_naive <- -1 / N * sum(w * log(pi_naive) +
+(1 - w) * log(1 - pi_naive))
+calibration_naive <- pi_naive * N / sum(w)
+validation_stats_nl <- tibble(model = "naive", pred_acc = naive_accuracy,log_loss = log_loss_naive, calibration = calibration_naive)
+kable(validation_stats_nl)
+```
+
+```{r}
+
+split_time <- dmy("01-01-2017")
+matches_train_df <- filter(matches_df_nl, Date < split_time)
+matches_test_df <- filter(matches_df_nl, Date >= split_time)
+# N <- nrow(matches_df_nl)
+# naive_accuracy <- mean(matches_df_nl$higher_rank_won)
+# w <- matches_df_nl$higher_rank_won
+# # For this model, pi is constant and equal to the accuracy we have already calculated.
+# pi_naive <- naive_accuracy
+# log_loss_naive <- -1 / N * sum(w * log(pi_naive) +
+# (1 - w) * log(1 - pi_naive))
+# calibration_naive <- pi_naive * N / sum(w)
+# validation_stats_nl <- tibble(model = "naive", pred_acc = naive_accuracy,log_loss = log_loss_naive, calibration = calibration_naive)
+# kable(validation_stats_nl)
+```
+
+```{r}
+# The probability that the higher ranked player wins
+
+pi_naive <- mean(matches_test_df$higher_rank_won)
+w <- matches_test_df$higher_rank_won
+N <- nrow(matches_test_df)
+# accuracy now is calculated on the test set.
+naive_accuracy <- mean(matches_test_df$higher_rank_won)
+log_loss_naive <- -1 / N * sum(w * log(pi_naive) +
+(1 - w) * log(1 - pi_naive))
+calibration_naive <- pi_naive * N / sum(w)
+validation_stats_nl_test <- tibble(model = "naive", pred_acc = naive_accuracy,
+log_loss = log_loss_naive, calibration = calibration_naive)
+```
+
+
+```{r}
+kable(validation_stats_nl_test)
+
+```
+
+
+```{r}
+probs_of_winning <- predict(fit_diff, matches_test_df, type = "response")
+preds_logistic <- ifelse(probs_of_winning > 0.5, 1, 0)
+accuracy_logistic <- mean(preds_logistic == matches_test_df$higher_rank_won)
+w <- matches_test_df$higher_rank_won
+log_loss_logistic <- -1 / N * sum(w * log(probs_of_winning) +
+(1 - w) * log(1 - probs_of_winning), na.rm = T)
+calibration_logistic <- sum(probs_of_winning) / sum(w)
+validation_stats_nl_test <- validation_stats_nl_test |>
+add_row(model = "logistic", pred_acc = accuracy_logistic,
+log_loss = log_loss_logistic, calibration = calibration_logistic)
+kable(validation_stats_nl_test)
+```
+
+
+
+
+
+
+```{r}
+```
+
+

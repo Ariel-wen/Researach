@@ -1,0 +1,191 @@
+---
+title: "dataClean"
+author: "Yiwen Peng"
+date: "2024-04-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+pacman::p_load(tidyverse, lubridate, patchwork)
+```
+
+
+```{r}
+# data1 <- readxl::read_xls("E:/Ariel/adelaide/research/data/2000.xls")
+# data2 <- readxl::read_xls("E:/Ariel/adelaide/research/data/2001.xls")
+# # check two table columns' type
+# str(data1)
+# str(data2)
+
+```
+## data cleaning
+
+2000 没有betting odds, 所以不合并选择这一年的数据
+合并其它年份，(每个column的type是否一致)
+
+```{r}
+#check missing value
+#row number
+# total <- nrow(data2)
+# summary(data2)
+```
+
+missing value
+选择betting odds 的时候， GBW             GBL             IWW             IWL  可以选择来计算elo，因为他们的缺失值468 and 469, missing value 最少，最适合直接drop.
+
+2. calculate each player's betting odds mean and replace missing value
+
+
+```{r}
+read_xls_file <- function(file_path) {
+  df <- readxl::read_xls(file_path)
+  # Convert WRank column to double
+  
+  # Check if 'WPts' column exists
+  if("WPts" %in% names(df)) {
+    # Convert specified columns to integers
+    df <- df %>%
+      mutate(WRank = as.integer(WRank),
+             LRank = as.integer(LRank),
+             WPts = as.integer(WPts),
+             LPts = as.integer(LPts))
+  } else {
+    # If 'WPts' column doesn't exist, set it to NA
+    df <- df %>%
+      mutate(WRank = as.integer(WRank),
+             LRank = as.integer(LRank),
+             WPts = NA_integer_,
+             LPts = NA_integer_)
+  }
+}
+
+
+  read_xlsx_file <- function(file_path) {
+  df <- readxl::read_xlsx(file_path)
+  # Convert WRank column to double
+  
+  # Check if 'WPts' column exists
+  if("WPts" %in% names(df)) {
+    # Convert specified columns to integers
+    df <- df %>%
+      mutate(WRank = as.integer(WRank),
+             LRank = as.integer(LRank),
+             WPts = as.integer(WPts),
+             LPts = as.integer(LPts))
+  } else {
+    # If 'WPts' column doesn't exist, set it to NA
+    df <- df %>%
+      mutate(WRank = as.integer(WRank),
+             LRank = as.integer(LRank),
+             WPts = NA_integer_,
+             LPts = NA_integer_)
+  }
+}
+```
+
+
+### 合并其它年份
+2000 to 2012
+
+2000的column 和其他表格的不一样，所以drop 2000
+```{r}
+# Import data from 2000 - 2012
+files1 <- str_glue("E:/Ariel/adelaide/research/data/{2000:2012}.xls")
+raw_matches1 <- files1 %>%
+  map_dfr(function(x)  read_xls_file(x))
+```
+20
+```{r}
+# Import data from 2013 - 2024
+files2 <- str_glue("E:/Ariel/adelaide/research/data/{2013:2024}.xlsx")
+raw_matches2 <- files2 %>%
+  map_dfr(function(x)  read_xlsx_file(x))
+
+```
+
+```{r}
+print(nrow(raw_matches1))
+print(nrow(raw_matches2))
+print(36541 +27805)
+```
+
+combine two tibble 
+
+```{r}
+raw_matches <- bind_rows(raw_matches1,raw_matches2,.id = "source")
+```
+
+```{r}
+raw_matches
+```
+
+
+
+```{r}
+str(raw_matches)
+skimr::skim_without_charts(raw_matches)
+```
+
+图三可以看出，有很多列的complete rate  都很小，只有0.0几。complete rate 不到0.5的都可以drop ,缺失值太多了
+
+ LRank     : chr [1:8678] "101" "442" "485" "69" ...
+ change this to number type
+```{r}
+raw_matches$LRank <- as.numeric(raw_matches$LRank)
+typeof(raw_matches$LRank)
+```
+
+
+```{r}
+str(raw_matches)
+```
+
+extract player information
+
+```{r}
+# c(unique(raw_matches$Winner),unique(raw_matches$Loser))
+# 
+# unique(c(unique(raw_matches$Winner),unique(raw_matches$Loser)))
+
+p1 <- unique(raw_matches$Winner)
+p2 <- unique(raw_matches$Loser)
+p3 <- unique(c(p1,p2))
+print(length(p3))
+print(length(unique(raw_matches$Winner)))
+print(length(unique(raw_matches$Loser)))
+print(length(c(unique(raw_matches$Winner),unique(raw_matches$Loser))))
+print(length(unique(c(unique(raw_matches$Winner),unique(raw_matches$Loser)))))
+```
+```{r}
+players_data <- tibble(player = p3)
+
+```
+
+```{r}
+players_data <- players_data %>% mutate(
+  Elo_score = 1500,
+  t_times = 1
+)
+
+players_data
+```
+
+
+
+```{r}
+saveRDS(players_data, file = "E:/Ariel/adelaide/research/R/data/players.rds")
+```
+
+```{r}
+c(unique(raw_matches$Winner),unique(raw_matches$Loser))
+
+unique(c(unique(raw_matches$Winner),unique(raw_matches$Loser)))
+
+```
+
+
+

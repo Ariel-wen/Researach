@@ -1,0 +1,543 @@
+---
+title: "ELO_K_T2"
+author: "Yiwen Peng"
+date: "2024-04-02"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+pacman::p_load(tidyverse, lubridate, patchwork, knitr)
+```
+
+
+```{r}
+matches_df_k_constant <- readRDS("E:/Ariel/adelaide/research/R/data/cleaned_matches.rds")
+players_df_k_constant <- readRDS("E:/Ariel/adelaide/research/R/data/players.rds")
+```
+
+
+```{r }
+players_df_k_constant
+```
+date time in increasing order
+
+```{r }
+# matches_df_k_constant <- matches_df_k_constant %>% arrange(Date)
+# matches_df_k_constant
+```
+
+
+```{r}
+print(60226 * 0.7)
+matches_df_k_constant[42100,]
+
+print(60226 * 0.8)
+matches_df_k_constant[48100,]
+
+```
+
+
+split time from by 2017
+```{r}
+split_time <- dmy("01-01-2017")
+matches_k_s2017 <- filter(matches_df_k_constant, Date < split_time)
+matches_k_g2017 <- filter(matches_df_k_constant, Date >= split_time)
+
+```
+
+time from 17 t0 19 
+```{r}
+split_time <- dmy("01-01-2020")
+matches_k_17to20 <- filter(matches_k_g2017, Date < split_time)
+matches_k_g20 <- filter(matches_k_g2017, Date >= split_time)
+
+```
+
+#### create a function of elo 
+
+```{r }
+k<-25
+elo_k <- function(k,matches_df,players_df){
+  n <- nrow(matches_df)
+  for (i in 1:n){
+  Winner <-matches_df$Winner[i]
+  Loser <-matches_df$Loser[i]
+  
+  diff_elo <-players_df[players_df$player == Loser,"Elo_score"][[1]] -  players_df[players_df$player == Winner,"Elo_score"][[1]]
+  
+  pi <- 1/ (1+10^(diff_elo/400))
+  
+  players_df[players_df$player == Winner,"Elo_score"] <- players_df[players_df$player == Winner,"Elo_score"] + (1 - pi) * k
+  
+ matches_df$winner_ELO[i] <-players_df[players_df$player == Winner,"Elo_score"][[1]]
+  
+ matches_df$winner_prob_ELO[i] <- pi
+ matches_df$loser_prob_ELO[i] <- 1- pi
+ 
+  players_df[players_df$player == Loser,"Elo_score"] <- players_df[players_df$player == Loser,"Elo_score"] +( pi - 1) * k
+  
+  matches_df$loser_ELO[i] <-players_df[players_df$player == Loser,"Elo_score"][[1]]
+  
+  }
+  return(list(matches_df = matches_df, players_df = players_df))
+}
+# 
+   # result <- elo_k(k,matches_df_k_constant,players_df_k_constant)
+   # matches_df_k_constant <- result$matches_df
+
+```
+
+```{r}
+matches_df_k_constant <- result$matches_df
+split_time <- dmy("01-01-2017")
+  matches_train_df <- filter(matches_df_k_constant, Date < split_time)
+  matches_test_df <- filter(matches_df_k_constant, Date >= split_time)
+  N <- nrow(matches_test_df)
+
+  preds_elo <- ifelse(matches_test_df$winner_prob_ELO > matches_test_df$loser_prob_ELO, 1, 0)
+  pi_test <- matches_test_df$winner_prob_ELO
+  #accuracy_logistic <- mean(preds_elo == matches_test_df$higher_elo_won)
+  accuracy <- mean(matches_test_df$winner_prob_ELO > matches_test_df$loser_prob_ELO)
+  #w <- matches_test_df$higher_elo_won
+  w<- preds_elo
+  #w <- preds_elo
+  log_loss_logistic <- -1 / N * sum(w * log(pi_test) +
+  (1 - w) * log(1 - pi_test), na.rm = T)
+  calibration_logistic <- sum(pi_test) / sum(w)
+
+  
+  val_25 <- tibble(model = paste0("Elo_k=",k), pred_acc = accuracy,log_loss = log_loss_logistic, calibration = calibration_logistic)
+  kable(val_25)
+
+```
+
+```{r}
+kable(val_25)
+```
+
+loop k value
+
+```{r}
+k_vector<- c(15,25,30,50)
+
+# Assuming you have defined k_vector already
+
+matches <- list()
+validatons <- list()
+
+
+for (k in k_vector) {
+  matches_df_k_constant <- readRDS("E:/Ariel/adelaide/research/R/data/cleaned_matches.rds")
+  players_df_k_constant <- readRDS("E:/Ariel/adelaide/research/R/data/players.rds")
+  
+  tibble_name <- paste0("tibble",k)
+
+  matches[[tibble_name]] <- elo_k(k,matches_df_k_constant,players_df_k_constant)
+  matches_df_k_constant <- matches[[tibble_name]]$matches_df
+  split_time <- dmy("01-01-2017")
+  matches_train_df <- filter(matches_df_k_constant, Date < split_time)
+  matches_test_df <- filter(matches_df_k_constant, Date >= split_time)
+  N <- nrow(matches_test_df)
+
+  preds_elo <- ifelse(matches_test_df$winner_prob_ELO > matches_test_df$loser_prob_ELO, 1, 0)
+  pi_test <- matches_test_df$winner_prob_ELO
+  #accuracy_logistic <- mean(preds_elo == matches_test_df$higher_elo_won)
+  accuracy <- mean(matches_test_df$winner_prob_ELO > matches_test_df$loser_prob_ELO)
+  #w <- matches_test_df$higher_elo_won
+  w<- preds_elo
+  #w <- preds_elo
+  log_loss_logistic <- -1 / N * sum(w * log(pi_test) +
+  (1 - w) * log(1 - pi_test), na.rm = T)
+  calibration_logistic <- sum(pi_test) / sum(w)
+
+  val_name <- paste0("val",k)
+  validatons[[val_name]] <- tibble(model = paste0("Elo_k=",k), pred_acc = accuracy,log_loss = log_loss_logistic, calibration = calibration_logistic)
+
+}
+matches
+validatons
+
+```
+
+```{r}
+matches
+validatons
+```
+
+
+
+
+
+```{r}
+matches_df_FTE <- readRDS("E:/Ariel/adelaide/research/R/data/cleaned_matches.rds")
+players_df_FTE <- readRDS("E:/Ariel/adelaide/research/R/data/players.rds")
+```
+
+
+
+```{r }
+
+elo_FTE <- function(delta,nu,sigma,matches_df,players_df){
+  n <- nrow(matches_df)
+  for (i in 1:n){
+  # CALCULATE K_FACTOR 
+  # set default value
+  # delta <- 100
+  # nu <- 5
+  # sigma <- 0.1
+  #  Grandslam adjustment factor
+  #C <- 1.1 
+  # set winner id
+  Winner <- matches_df$Winner[i]
+  # set loser id
+  Loser <- matches_df$Loser[i]
+  # # add time = time + 1
+  # players_df_FTE[players_df_FTE$player == Winner,"t_times"] <- m_winner + 1
+  # 
+  # players_df_FTE[players_df_FTE$player == Loser,"t_times"] <- m_loser + 1
+  
+  # set winner play times
+  m_winner <- subset(players_df, player == Winner)$t_times
+  # set winnner k
+  k_winner <- delta/(m_winner + nu)^sigma
+  # set loser play times
+  m_loser <- subset(players_df,player == Loser)$t_times
+  # set loser k
+   k_loser <- delta/(m_loser + nu)^sigma
+  # # If Grandslam, k_winner = c * k_winner
+  #  level <- matches_df_FTE$tourney_level[i]
+   #k_winner <- ifelse(level == 'G',C * k_winner,k_winner)
+  diff_elo <-players_df[players_df$player == Loser,"Elo_score"][[1]] -  players_df[players_df$player == Winner,"Elo_score"][[1]]
+  
+  pi <- 1/ (1+10^(diff_elo/400))
+  
+  # UPDATE PROBABILITY
+  matches_df$winner_prob_ELO[i] <- pi
+  matches_df$loser_prob_ELO[i] <- 1 - pi
+  
+  # update winner elo
+  players_df[players_df$player == Winner,"Elo_score"] <- players_df[players_df$player == Winner,"Elo_score"] + (1 - pi) * k_winner
+  
+  matches_df$winner_ELO[i] <-players_df[players_df$player == Winner,"Elo_score"][[1]]
+ 
+  #update loser elo
+  players_df[players_df$player == Loser,"Elo_score"] <- players_df[players_df$player == Loser,"Elo_score"] +(pi - 1) * k_loser
+  matches_df$loser_ELO[i] <-players_df[players_df$player == Loser,"Elo_score"][[1]]
+  
+  #matches_df$diff_elo <- diff_elo
+  
+  # # add time = time + 1
+
+  players_df[players_df$player == Winner,"t_times"] <- m_winner + 1
+
+  players_df[players_df$player == Loser,"t_times"] <- m_loser + 1
+  
+}
+  return(list(matches_df = matches_df, players_df = players_df))
+}
+
+delta <- 100
+nu <- 5
+sigma <- 0.1
+result <- elo_FTE(delta,nu,sigma,matches_df_FTE,players_df_FTE)
+matches_df_FTE1 <- result$matches_df
+```
+
+```{r}
+matches_df_FTE1
+```
+
+
+
+```{r}
+split_time <- dmy("01-01-2017")
+matches_train_df <- filter(matches_df_FTE1, Date < split_time)
+matches_test_df <- filter(matches_df_FTE1, Date >= split_time)
+N <- nrow(matches_test_df)
+
+preds_elo <- ifelse(matches_test_df$winner_prob_ELO > matches_test_df$loser_prob_ELO, 1, 0)
+pi_test <- matches_test_df$winner_prob_ELO
+#accuracy_logistic <- mean(preds_elo == matches_test_df$higher_elo_won)
+accuracy <- mean(matches_test_df$winner_prob_ELO > matches_test_df$loser_prob_ELO)
+#w <- matches_test_df$higher_elo_won
+w<- preds_elo
+#w <- preds_elo
+log_loss_logistic <- -1 / N * sum(w * log(pi_test) +
+(1 - w) * log(1 - pi_test), na.rm = T)
+calibration_logistic <- sum(pi_test) / sum(w)
+
+  
+val_FTE1 <- tibble(model = paste0("ElO FTE=",1), pred_acc = accuracy,log_loss = log_loss_logistic, calibration = calibration_logistic)
+kable(val_FTE1)
+
+```
+
+select top 50 and top 100
+
+```{r}
+players_df_FTE <- result$players_df
+
+player_50 <- players_df_FTE %>%
+  arrange(desc(Elo_score)) %>%
+  slice(1:50) 
+player_50
+
+
+match_50 <- matches_df_FTE1 %>%
+  filter((Winner %in% player_50$player) | (Loser %in% player_50$player)) 
+
+
+split_time <- dmy("01-01-2017")
+#### 可以修改时间 这是从2017 到 2024 可以测2023 -2024 
+matches_train_df <- filter(match_50, Date < split_time)
+matches_test_df <- filter(match_50, Date >= split_time)
+N <- nrow(matches_test_df)
+
+preds_elo <- ifelse(matches_test_df$winner_prob_ELO > matches_test_df$loser_prob_ELO, 1, 0)
+pi_test <- matches_test_df$winner_prob_ELO
+#accuracy_logistic <- mean(preds_elo == matches_test_df$higher_elo_won)
+accuracy <- mean(matches_test_df$winner_prob_ELO > matches_test_df$loser_prob_ELO)
+#w <- matches_test_df$higher_elo_won
+w<- preds_elo
+#w <- preds_elo
+log_loss_logistic <- -1 / N * sum(w * log(pi_test) +
+(1 - w) * log(1 - pi_test), na.rm = T)
+calibration_logistic <- sum(pi_test) / sum(w)
+
+  
+val_FTE_50 <- tibble(model = paste0("ElO FTE=",1), pred_acc = accuracy,log_loss = log_loss_logistic, calibration = calibration_logistic)
+kable(val_FTE_50)
+
+```
+
+```{r}
+
+delta_vector <- c(100)
+nu_vector <- c(5)
+sigma_vector <- c(0.1)
+
+# Assuming you have defined k_vector already
+
+matches_FTE <- list()
+validatons_FTE <- list()
+
+
+
+for (k in k_vector) {
+  matches_df_k_constant <- readRDS("E:/Ariel/adelaide/research/R/data/cleaned_matches.rds")
+  players_df_k_constant <- readRDS("E:/Ariel/adelaide/research/R/data/players.rds")
+  
+  tibble_name <- paste0("tibble_FTE",k)
+
+  matches_FTE[[tibble_name]] <- elo_k(k,matches_df_k_constant,players_df_k_constant)
+  matches_df_k_FTE <- matches_FTE[[tibble_name]]$matches_df
+  split_time <- dmy("01-01-2017")
+  matches_train_df <- filter(matches_df_k_FTE, Date < split_time)
+  matches_test_df <- filter(matches_df_k_FTE, Date >= split_time)
+  N <- nrow(matches_test_df)
+
+  preds_elo <- ifelse(matches_test_df$winner_prob_ELO > matches_test_df$loser_prob_ELO, 1, 0)
+  pi_test <- matches_test_df$winner_prob_ELO
+  #accuracy_logistic <- mean(preds_elo == matches_test_df$higher_elo_won)
+  accuracy <- mean(matches_test_df$winner_prob_ELO > matches_test_df$loser_prob_ELO)
+  #w <- matches_test_df$higher_elo_won
+  w<- preds_elo
+  #w <- preds_elo
+  log_loss_logistic <- -1 / N * sum(w * log(pi_test) +
+  (1 - w) * log(1 - pi_test), na.rm = T)
+  calibration_logistic <- sum(pi_test) / sum(w)
+
+  val_name <- paste0("va_FTE",k)
+  validatons_FTE[[val_name]] <- tibble(model = paste0("Elo_FTE=",k), pred_acc = accuracy,log_loss = log_loss_logistic, calibration = calibration_logistic)
+
+}
+matches_FTE
+validatons_FTE
+
+```
+
+
+```{r}
+matches_df_k_constant <- result$matches_df
+split_time <- dmy("01-01-2017")
+  matches_train_df <- filter(matches_df_k_constant, Date < split_time)
+  matches_test_df <- filter(matches_df_k_constant, Date >= split_time)
+  N <- nrow(matches_test_df)
+
+  preds_elo <- ifelse(matches_test_df$winner_prob_ELO > matches_test_df$loser_prob_ELO, 1, 0)
+  pi_test <- matches_test_df$winner_prob_ELO
+  #accuracy_logistic <- mean(preds_elo == matches_test_df$higher_elo_won)
+  accuracy <- mean(matches_test_df$winner_prob_ELO > matches_test_df$loser_prob_ELO)
+  #w <- matches_test_df$higher_elo_won
+  w<- preds_elo
+  #w <- preds_elo
+  log_loss_logistic <- -1 / N * sum(w * log(pi_test) +
+  (1 - w) * log(1 - pi_test), na.rm = T)
+  calibration_logistic <- sum(pi_test) / sum(w)
+
+  
+  val_25 <- tibble(model = paste0("Elo_k=",k), pred_acc = accuracy,log_loss = log_loss_logistic, calibration = calibration_logistic)
+  kable(val_25)
+
+```
+
+
+
+```{r}
+matches_df_k_constant
+```
+
+```{r}
+split_time <- dmy("01-01-2017")
+matches_train_df <- filter(matches_df_k_constant, Date < split_time)
+matches_test_df <- filter(matches_df_k_constant, Date >= split_time)
+
+```
+
+```{r}
+matches_test_df
+```
+
+
+```{r}
+N <- nrow(matches_test_df)
+
+#pi_test <- predict(fit_diff, matches_test_df, type = "response")
+#pi_test <- elo_prob(matches_test_df$diff_elo)
+
+#preds_elo <- ifelse(pi_test > 0.5, 1, 0)
+preds_elo <- ifelse(matches_test_df1$winner_prob_ELO > matches_test_df1$loser_prob_ELO, 1, 0)
+pi_test <- matches_test_df1$winner_prob_ELO
+#accuracy_logistic <- mean(preds_elo == matches_test_df$higher_elo_won)
+accuracy <- mean(matches_test_df1$winner_prob_ELO > matches_test_df1$loser_prob_ELO)
+#w <- matches_test_df$higher_elo_won
+w<- preds_elo
+#w <- preds_elo
+log_loss_logistic <- -1 / N * sum(w * log(pi_test) +
+(1 - w) * log(1 - pi_test), na.rm = T)
+calibration_logistic <- sum(pi_test) / sum(w)
+
+```
+
+```{r}
+matches_test_df1
+```
+
+
+```{r}
+
+```
+
+
+
+```{r }
+validation_stats1 <- tibble(model = "Elo_k=25", pred_acc = accuracy,log_loss = log_loss_logistic, calibration = calibration_logistic)
+kable(validation_stats1)
+
+```
+
+
+
+
+
+```{r}
+matches_df_k_constant
+```
+create a function of elo above
+k and data as input parameter
+
+
+
+
+
+
+
+
+
+
+```{r}
+
+#  create a higher elo win to show that if higher elo win 
+matches_df_k_constant <- matches_df_k_constant |>
+  na.omit() |>
+  mutate(higher_elo_won = winner_ELO > loser_ELO) |>
+  mutate(higher_points_elo = winner_ELO * (higher_elo_won) +
+           loser_ELO * (1 - higher_elo_won)) |>
+  mutate(lower_points_elo = winner_ELO * (1 - higher_elo_won) +
+           loser_ELO * (higher_elo_won))
+
+matches_df_k_constant
+```
+
+
+```{r}
+matches_df_k_constant <- matches_df_k_constant |>
+  mutate(diff_elo = higher_points_elo - lower_points_elo,
+         diff = loser_ELO - winner_ELO)
+```
+
+```{r}
+matches_df_k_constant
+```
+
+
+```{r}
+matches_player_elo <- matches_df_k_constant %>% 
+  select(c(
+    "tourney_date",
+    "Winner",
+    "Loser",
+    "winner_ELO",
+    "loser_ELO"
+  )) %>%
+  gather(player_type, player, Winner, Loser) %>%
+  mutate(elo = ifelse(player_type == "Winner", winner_ELO, loser_ELO)) %>%
+  arrange(tourney_date)
+
+
+matches_player_elo
+```
+
+
+```{r}
+ggplot(matches_player_elo, aes(x = tourney_date, y = elo,color = as.factor(player))) +
+  geom_line(show.legend = FALSE) +
+  labs(
+    title = "Elo Ratings Over Time for Player ID",
+    x = "Tournament Date",
+    y = "Elo Rating"
+  ) +
+  theme_minimal() 
+```
+top 10 elo player
+```{r}
+
+top_10_players <- players_df_k_constant %>%
+  top_n(10, wt = Elo_score)
+
+print(top_10_players)
+```
+
+
+```{r}
+player_data <- matches_player_elo %>%
+  filter(player %in% top_10_players$player)
+player_data
+# Plot Elo ratings over time for the specified player
+ggplot(player_data, aes(x = tourney_date, y = elo,color = as.factor(player))) +
+  geom_line() +
+  labs(
+    title = "Elo Ratings Over Time for Player ID",
+    x = "Tournament Date",
+    y = "Elo Rating",
+    color = "Player ID"
+  ) +
+  theme_minimal() 
+```
+
+

@@ -1,0 +1,299 @@
+---
+title: "ELO SURFACE"
+author: "Yiwen Peng"
+date: "2024-04-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+pacman::p_load(tidyverse, lubridate, patchwork, knitr)
+```
+
+
+```{r}
+matches_SURFACE <- readRDS("E:/Ariel/adelaide/research/R/data/cleaned_matches.rds")
+players_SURFACE <- readRDS("E:/Ariel/adelaide/research/R/data/players.rds")
+```
+
+```{r}
+matches_SURFACE
+```
+
+
+```{r }
+players_SURFACE
+```
+date time in increasing order
+
+```{r }
+unique(matches_SURFACE$Surface)
+```
+
+
+```{r}
+matches_hard <- matches_SURFACE %>%
+  select(Date,
+         Surface,
+         Winner,
+         Loser,
+         winner_ELO,
+         loser_ELO,
+         winner_prob_ELO,
+         loser_prob_ELO)
+  
+# matches_hard
+
+players_hard <- players_SURFACE
+
+matches_Carpet <- matches_SURFACE %>%
+  select(Date,
+         Surface,
+         Winner,
+         Loser,
+         winner_ELO,
+         loser_ELO,
+         winner_prob_ELO,
+         loser_prob_ELO)
+  
+# matches_hard
+
+players_Carpet <- players_SURFACE
+
+matches_Clay <- matches_SURFACE %>%
+  select(Date,
+         Surface,
+         Winner,
+         Loser,
+         winner_ELO,
+         loser_ELO,
+         winner_prob_ELO,
+         loser_prob_ELO)
+  
+# matches_hard
+
+players_Clay <- players_SURFACE
+
+
+matches_Grass <- matches_SURFACE %>%
+  select(Date,
+         Surface,
+         Winner,
+         Loser,
+         winner_ELO,
+         loser_ELO,
+         winner_prob_ELO,
+         loser_prob_ELO)
+  
+# matches_hard
+
+players_Grass <- players_SURFACE
+
+
+```
+
+
+
+
+```{r}
+elo_k_surface <- function(k,matches_df,players_df,surface){
+  n <- nrow(matches_df)
+  for (i in 1:n){
+  Winner <-matches_df$Winner[i]
+  Loser <-matches_df$Loser[i]
+  # if the surface == input surface k =1.5k
+  k_surface <- ifelse(matches_df$Surface[i] == surface, 1.5*k,k)
+  
+  diff_elo <-players_df[players_df$player == Loser,"Elo_score"][[1]] -  players_df[players_df$player == Winner,"Elo_score"][[1]]
+  
+  pi <- 1/ (1+10^(diff_elo/400))
+  
+  players_df[players_df$player == Winner,"Elo_score"] <- players_df[players_df$player == Winner,"Elo_score"] + (1 - pi) *  k_surface
+  
+ matches_df$winner_ELO[i] <-players_df[players_df$player == Winner,"Elo_score"][[1]]
+  
+ matches_df$winner_prob_ELO[i] <- pi
+ matches_df$loser_prob_ELO[i] <- 1- pi
+ 
+  players_df[players_df$player == Loser,"Elo_score"] <- players_df[players_df$player == Loser,"Elo_score"] +( pi - 1) *  k_surface
+  
+  matches_df$loser_ELO[i] <-players_df[players_df$player == Loser,"Elo_score"][[1]]
+  
+  }
+  return(list(matches_df = matches_df, players_df = players_df))
+}
+
+```
+
+```{r}
+k<- 25
+result_hard <- elo_k_surface(k,matches_hard,players_hard,"Hard")
+matches_Hard <- result_hard$matches_df
+
+```
+
+
+```{r}
+matches_Hard %>% arrange(desc(Date))
+```
+
+
+```{r}
+
+split_time <- dmy("01-01-2017")
+matches_train_df <- filter(matches_Hard, Date < split_time)
+matches_test_df <- filter(matches_Hard, Date >= split_time)
+matches_test_df
+```
+
+```{r}
+
+N <- nrow(matches_test_df)
+
+preds_elo <- ifelse(matches_test_df$winner_prob_ELO > matches_test_df$loser_prob_ELO, 1, 0)
+pi_test <- matches_test_df$winner_prob_ELO
+#accuracy_logistic <- mean(preds_elo == matches_test_df$higher_elo_won)
+accuracy <- mean(matches_test_df$winner_prob_ELO > matches_test_df$loser_prob_ELO)
+#w <- matches_test_df$higher_elo_won
+w<- preds_elo
+#w <- preds_elo
+log_loss_logistic <- -1 / N * sum(w * log(pi_test) +
+(1 - w) * log(1 - pi_test), na.rm = T)
+calibration_logistic <- sum(pi_test) / sum(w)
+
+
+val_HARD <- tibble(model = paste0("Elo_k=",k), pred_acc = accuracy,log_loss = log_loss_logistic, calibration = calibration_logistic)
+kable(val_HARD)
+```
+
+
+carpet
+
+```{r}
+k<- 25
+result_CARPET <- elo_k_surface(k,matches_Carpet,players_Carpet,"Carpet")
+matches_CARPET <- result_CARPET$matches_df
+
+```
+
+
+
+
+
+```{r}
+
+split_time <- dmy("01-01-2017")
+matches_train_df <- filter(matches_CARPET, Date < split_time)
+matches_test_df <- filter(matches_CARPET, Date >= split_time)
+matches_test_df
+```
+
+```{r}
+
+N <- nrow(matches_test_df)
+
+preds_elo <- ifelse(matches_test_df$winner_prob_ELO > matches_test_df$loser_prob_ELO, 1, 0)
+pi_test <- matches_test_df$winner_prob_ELO
+#accuracy_logistic <- mean(preds_elo == matches_test_df$higher_elo_won)
+accuracy <- mean(matches_test_df$winner_prob_ELO > matches_test_df$loser_prob_ELO)
+#w <- matches_test_df$higher_elo_won
+w<- preds_elo
+#w <- preds_elo
+log_loss_logistic <- -1 / N * sum(w * log(pi_test) +
+(1 - w) * log(1 - pi_test), na.rm = T)
+calibration_logistic <- sum(pi_test) / sum(w)
+
+
+val_CARPET <- tibble(model = paste0("Elo_k=",k), pred_acc = accuracy,log_loss = log_loss_logistic, calibration = calibration_logistic)
+kable(val_CARPET)
+```
+
+
+
+
+```{r}
+k<- 25
+result_CLAY <- elo_k_surface(k,matches_Clay,players_Clay,"Clay")
+matches_CLAY <- result_CLAY$matches_df
+
+```
+
+
+
+
+
+```{r}
+
+split_time <- dmy("01-01-2017")
+matches_train_df <- filter(matches_CLAY, Date < split_time)
+matches_test_df <- filter(matches_CLAY, Date >= split_time)
+matches_test_df
+```
+
+```{r}
+
+N <- nrow(matches_test_df)
+
+preds_elo <- ifelse(matches_test_df$winner_prob_ELO > matches_test_df$loser_prob_ELO, 1, 0)
+pi_test <- matches_test_df$winner_prob_ELO
+#accuracy_logistic <- mean(preds_elo == matches_test_df$higher_elo_won)
+accuracy <- mean(matches_test_df$winner_prob_ELO > matches_test_df$loser_prob_ELO)
+#w <- matches_test_df$higher_elo_won
+w<- preds_elo
+#w <- preds_elo
+log_loss_logistic <- -1 / N * sum(w * log(pi_test) +
+(1 - w) * log(1 - pi_test), na.rm = T)
+calibration_logistic <- sum(pi_test) / sum(w)
+
+
+val_CLAY <- tibble(model = paste0("Elo_k=",k,"CALY"), pred_acc = accuracy,log_loss = log_loss_logistic, calibration = calibration_logistic)
+kable(val_CLAY)
+```
+
+
+GRASS
+```{r}
+k<- 25
+result_GRASS <- elo_k_surface(k,matches_Grass,players_Grass,"GRASS")
+matches_GRASS <- result_GRASS$matches_df
+
+```
+
+
+
+
+
+```{r}
+
+split_time <- dmy("01-01-2017")
+matches_train_df <- filter(matches_GRASS, Date < split_time)
+matches_test_df <- filter(matches_GRASS, Date >= split_time)
+matches_test_df
+```
+
+```{r}
+
+N <- nrow(matches_test_df)
+
+preds_elo <- ifelse(matches_test_df$winner_prob_ELO > matches_test_df$loser_prob_ELO, 1, 0)
+pi_test <- matches_test_df$winner_prob_ELO
+#accuracy_logistic <- mean(preds_elo == matches_test_df$higher_elo_won)
+accuracy <- mean(matches_test_df$winner_prob_ELO > matches_test_df$loser_prob_ELO)
+#w <- matches_test_df$higher_elo_won
+w<- preds_elo
+#w <- preds_elo
+log_loss_logistic <- -1 / N * sum(w * log(pi_test) +
+(1 - w) * log(1 - pi_test), na.rm = T)
+calibration_logistic <- sum(pi_test) / sum(w)
+
+
+val_GRASS <- tibble(model = paste0("Elo_k=",k,"GRASS"), pred_acc = accuracy,log_loss = log_loss_logistic, calibration = calibration_logistic)
+kable(val_GRASS)
+```
+
+
+

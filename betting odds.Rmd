@@ -1,0 +1,616 @@
+---
+title: '2000'
+author: "Yiwen Peng"
+date: "2023-11-21"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax   authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+```{r}
+pacman::p_load(tidyverse, lubridate, patchwork)
+```
+
+
+
+## data cleaning
+
+2000 没有betting odds, 所以不合并选择这一年的数据
+合并其它年份，(每个column的type是否一致)
+
+
+
+missing value
+选择betting odds 的时候， GBW             GBL             IWW             IWL  可以选择来计算elo，因为他们的缺失值468 and 469, missing value 最少，最适合直接drop.
+
+2. calculate each player's betting odds mean and replace missing value
+
+
+
+### 合并其它年份
+2000 to 2012
+
+2000的column 和其他表格的不一样，所以drop 2000
+
+20
+
+
+combine two tibble 
+
+```{r}
+#raw_matches <- rbind(raw_matches1,raw_matches2)
+```
+
+```{r}
+# Import data from 2000 - 2003
+# files2 <- str_glue("E:/Ariel/adelaide/research/data/{2013:2024}.xlsx")
+# for (year in 2013 : 2024) {
+#   # Construct file path
+#   file_path <- str_glue("E:/Ariel/adelaide/research/data/{year}.xlsx")
+#   
+# } 
+# raw_matches2 <- files2 %>%
+#   map_dfr(function(x)  readxl::read_xlsx(x))
+```
+
+
+
+
+图三可以看出，有很多列的complete rate  都很小，只有0.0几。complete rate 不到0.5的都可以drop ,缺失值太多了
+
+ LRank     : chr [1:8678] "101" "442" "485" "69" ...
+ change this to number type
+
+
+
+
+
+
+```{r}
+# Given values of pk (replace with your own values)
+pk <- c(0.2, 0.3, 0.4, 0.5)
+
+# Function to calculate logit transformation
+logit <- function(p) {
+  logit_values <- log(p / (1 - p))
+  return(logit_values)
+}
+
+# Function to logit probability
+logit_prob <- function(data){
+  logit_pk <- apply(data,2,logit)
+  logit_pk <- rowMeans(logit_pk,na.rm = TRUE)
+  p1 <- exp(logit_pk) / (1 + exp(logit_pk))
+  return(p1)
+}
+
+#print(logit_prob(pk))
+
+
+# # Calculate logit-transformed values for pk
+# logit_pk <- logit(pk)
+# print(logit_pk)
+# 
+# # Calculate the mean of logit-transformed values
+# logit_pk <- mean(logit_pk)
+# 
+# # Invert the mean logit to get p1
+# p1 <- exp(logit_pk) / (1 + exp(logit_pk))
+# 
+# # Print the result
+# print(p1)
+
+```
+
+
+```{r}
+betting_prob <- function(a,b){
+  res = b /(a+b)
+  return(res)
+}
+```
+
+
+
+```{r}
+mean(betting_prob(raw_matches$CBW,raw_matches$CBL),na.rm = TRUE)
+mean(raw_matches$CBL / sum(raw_matches$CBW + raw_matches$CBL,na.rm = TRUE),na.rm = TRUE)
+
+#mean(raw_matches$CBW + raw_matches$CBL)
+```
+```{r}
+betting_prob(raw_matches$CBW,raw_matches$CBL)
+```
+
+```{r}
+raw_matches$CBL / sum(raw_matches$CBW + raw_matches$CBL,na.rm = TRUE)
+sum(raw_matches$CBW + raw_matches$CBL,na.rm = TRUE)
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+raw_matches
+```
+
+
+```{r}
+
+colnames(raw_matches)
+```
+
+```{r}
+betting_odds_match <- raw_matches %>% select("Winner","Loser","CBW":"AvgL")
+betting_odds_match 
+
+betting_odds <- raw_matches %>% select("CBW":"B365L")
+#betting_odds <- as.data.frame(betting_odds) 
+betting_odds
+#betting_oddsProb <- tibble()
+betting_oddsProb <- betting_odds %>%
+  mutate(
+    CBWP = betting_prob(CBW,CBL),
+    CBLP = betting_prob(CBL,CBW),
+    GBWP = betting_prob(GBW,GBL),
+    GBLP = betting_prob(GBL,GBW),
+    IWWP = betting_prob(IWW,IWL),
+    IWLP = betting_prob(IWL,IWW),
+    SBWP = betting_prob(SBW,SBL),
+    SBLP = betting_prob(SBL,SBW),
+    B365WP = betting_prob(B365W,B365L),
+    B365LP = betting_prob(B365L,B365W)
+  )%>%
+  select("CBWP":"B365LP")
+betting_oddsProb
+temp <- raw_matches %>% select("B&WW":"AvgL")
+temp
+calculate_probabilities <- function(tibble,origin) {
+  # Initialize an empty tibble to store results
+
+  # Loop through each pair of variables
+  i<-1
+  while (i <= ncol(tibble)) {
+    # Calculate probabilities using the betting_prob function
+    j <- i+1
+    prob_ij <- betting_prob(tibble[[i]], tibble[[j]])
+    prob_ji <- betting_prob(tibble[[j]], tibble[[i]])
+    
+    # Store the results in the tibble
+    origin <- bind_cols(origin, tibble( !!sym(paste0(names(tibble)[i], 'p')) := prob_ij,
+                                        !!sym(paste0(names(tibble)[j], 'p')) := prob_ji))
+    i <- i+2
+  } 
+  
+  # Return the result
+  return(origin)
+}
+
+calculate_probabilities(temp,betting_oddsProb)
+
+
+
+#betting_oddsProb
+```
+
+betting odds  -> can get winner probability lose probability
+if winner probability > loser probabiltiy -> higher prob win =1
+calculate accuracy mean(higher prob win)
+
+
+```{r}
+# Select even and odd columns
+even_cols <- betting_oddsProb[, seq(2, ncol(betting_oddsProb), by = 2)]
+odd_cols <- betting_oddsProb[, seq(1, ncol(betting_oddsProb), by = 2)]
+
+# Create tibbles from selected columns
+LOSER <- as_tibble(even_cols)
+WINNER <- as_tibble(odd_cols)
+WINNER
+LOSER
+
+```
+
+```{r}
+# WINNER <- betting_oddsProb %>%
+#   select("CBWP","GBWP","IWWP","SBWP","WPtsP","B365WP","B&WWP" )
+# LOSER <- betting_oddsProb %>%
+#   select("CBLP","GBLP","IWLP","SBLP","LPtsP","B365LP","B&WLP")
+```
+
+
+```{r}
+winner_prob <- logit_prob(WINNER)
+winner_prob
+
+loser_prob <- logit_prob(LOSER)
+loser_prob
+
+```
+
+```{r}
+combine_prob <- tibble(
+  winner_prob_BCM = winner_prob,
+  loser_prob_BCM = loser_prob
+) 
+combine_prob
+
+```
+
+higher probability win 
+
+```{r}
+combine_prob_withoutna <- combine_prob %>% mutate(
+  higher_prob_win = winner_prob > loser_prob
+
+) %>% na.omit()
+combine_prob_withoutna
+```
+
+
+```{r}
+mean(combine_prob_withoutna$higher_prob_win)
+```
+
+
+
+```{r}
+
+last_1200_rows <- combine_prob_withoutna %>%
+  slice(n() - 1200 : n())
+
+```
+
+
+```{r}
+mean(last_1200_rows$higher_prob_win)
+```
+
+
+
+```{r}
+raw_matches_withbetP <- cbind(raw_matches,combine_prob)
+raw_matches_withbetP
+raw_matches_withbetP <- raw_matches_withbetP %>% filter(!is.na(winner_prob_BCM) & !is.na(loser_prob_BCM)) %>%
+  mutate(higher_prob_win_BCM = winner_prob_BCM > loser_prob_BCM)
+raw_matches_withbetP
+saveRDS(raw_matches_withbetP, file = "E:/Ariel/adelaide/research/R/data/raw_matches_withbetP.rds")
+```
+```{r}
+cleaned_matches <- raw_matches_withbetP %>% 
+  select("Date","Tournament","Surface","Round":"LRank","Wsets":"LPts","winner_prob_BCM","loser_prob_BCM","higher_prob_win_BCM" )
+cleaned_matches
+```
+
+```{r}
+cleaned_matches <- cleaned_matches %>% 
+  mutate(
+  winner_ELO = 1500,
+  loser_ELO = 1500,
+  winner_prob_ELO = 0,
+  loser_prob_ELO = 0,
+  Date = as.Date(Date)
+  ) %>%arrange(Date)
+cleaned_matches
+```
+
+```{r}
+gs <- c("Australian Open","French Open","US Open","Wimbledon")
+cleaned_matches <- cleaned_matches %>%
+  mutate(
+    Tournament = ifelse(Tournament %in% gs,"Grand Slams",Tournament)
+  )
+```
+
+
+```{r}
+saveRDS(cleaned_matches, file = "E:/Ariel/adelaide/research/R/data/cleaned_matches.rds")
+
+```
+
+
+BCM accuracy
+```{r}
+N <- nrow(cleaned_matches)
+accuracy <- mean(cleaned_matches$winner_prob_BCM > cleaned_matches$loser_prob_BCM)
+#mean(cleaned_matches$higher_prob_win)
+print("accuracy")
+print(accuracy)
+
+pi <- cleaned_matches$winner_prob_BCM
+preds <- ifelse(cleaned_matches$higher_prob_win_BCM,1,0)
+#accuracy_logistic <- mean(preds_elo == matches_test_df$higher_elo_won)
+#w <- matches_test_df$higher_elo_won
+w<- preds
+#w <- preds_elo
+log_loss_logistic <- -1 / N * sum(w * log(pi) +
+(1 - w) * log(1 - pi), na.rm = T)
+calibration_logistic <- sum(pi) / sum(w)
+print("log loss")
+print(log_loss_logistic)
+print("calibration")
+print(calibration_logistic)
+```
+
+```{r}
+unique(cleaned_matches$Comment)
+```
+
+```{r}
+cleaned_matches_cs <- cleaned_matches %>% filter(Comment == "Completed" | Comment =="Sched")
+```
+
+```{r}
+saveRDS(cleaned_matches_cs, file = "E:/Ariel/adelaide/research/R/data/cleaned_matches_cs.rds")
+
+```
+
+
+BCM probability after selecting comment with complete and sched
+```{r}
+mean(cleaned_matches_cs$higher_prob_win_BCM)
+```
+```{r}
+val_bcm <- function(matches){
+  split_time <- dmy("01-01-2017")
+  matches_train <- filter(matches, Date < split_time)
+  matches_test <- filter(matches, Date >= split_time)
+  N <- nrow(matches_test)
+  accuracy <- mean(matches_test$winner_prob_BCM > matches_test$loser_prob_BCM)
+  #mean(cleaned_matches$higher_prob_win)
+  print("accuracy")
+  print(accuracy)
+  
+  pi <- matches_test$winner_prob_BCM
+  preds <- ifelse(matches_test$higher_prob_win_BCM,1,0)
+  #accuracy_logistic <- mean(preds_elo == matches_test_df$higher_elo_won)
+  #w <- matches_test_df$higher_elo_won
+  w<- preds
+  #w <- preds_elo
+  log_loss_logistic <- -1 / N * sum(w * log(pi) +
+  (1 - w) * log(1 - pi), na.rm = T)
+  calibration_logistic <- sum(pi) / sum(w)
+  print("log loss")
+  print(log_loss_logistic)
+  print("calibration")
+  print(calibration_logistic)
+}
+
+```
+
+```{r}
+val_bcm(cleaned_matches)
+```
+
+
+```{r}
+val_bcm(cleaned_matches_cs)
+```
+
+
+```{r}
+cleaned_matches %>% filter(Comment == "Awarded")
+```
+
+winning set and losing set 没打满
+
+```{r}
+cleaned_matches %>% filter(Comment == "Sched")
+```
+
+打满了，可以留
+
+```{r}
+cleaned_matches %>% filter(Comment == "Disqualified")
+```
+没打满
+
+
+```{r}
+cleaned_matches %>% filter(Comment == "Walkover" )
+```
+
+
+```{r}
+cleaned_matches %>% filter(Comment == "Retired" )
+```
+没打满
+
+
+tournment
+
+```{r}
+
+unique(cleaned_matches$Tournament)
+length(unique(cleaned_matches$Tournament))
+```
+
+
+```{r}
+cleaned_matches %>% 
+  filter(str_detect(Tournament,"Open|open")) %>%
+  distinct(Tournament)
+  
+  
+```
+
+
+
+
+
+
+
+
+
+## 下面的没用
+
+
+check missing value, 数据分布，数据间的关系。
+共线性？
+
+### drop missing value
+
+```{r}
+matches <- na.omit(raw_matches)
+```
+
+每行至少有一个missing value
+
+### Drop columns with complete rate < 0.5
+```{r}
+# Drop columns with complete rate < 0.5
+# Calculate complete rate for each column
+complete_rate <- colMeans(!is.na(raw_matches))
+
+# Identify columns with complete rate < 0.5
+cols_to_drop <- names(complete_rate[complete_rate < 0.5])
+
+# Drop columns
+matches <- raw_matches[, !(names(raw_matches) %in% cols_to_drop)]
+
+
+matches
+```
+```{r}
+skimr::skim_without_charts(matches)
+```
+### drop missing value
+
+```{r}
+matches_withoutMissing <- na.omit(matches)
+matches_withoutMissing
+```
+
+
+
+
+```{r}
+matches_365 <- matches_withoutMissing %>%
+  select(c(
+    Winner,Loser,B365W,B365L
+  ))
+```
+
+
+```{r}
+matches_365
+```
+
+odd 越高 ， 输的可能性越大
+
+```{r}
+matches_365 <- matches_365 |>
+  mutate(LOWER_odd_win = B365W < B365L)
+```
+
+
+```{r}
+mean(matches_365$LOWER_odd_win)
+```
+
+#### Calculate probability
+
+```{r}
+matches_IW <- matches_IW |>
+  mutate(winner_odd_prob = B365L/(B365W+B365L),
+         loser_odd_prob = B365W/(B365W+B365L))
+matches_IW 
+```
+
+### create bookmakers consensus model (BCM)
+1.Calculate each player's probability from each row marked as pk
+2.Aim: find each player's probability 
+    - Combine Winner and Loser into one column
+    - Combiner winner_odd_prob and loser_odd_prob into into one column
+3.Based on each player, calculate his average of logit (pk)
+4.Use logit function to calculate prob
+
+```{r}
+matches_IW <- matches_IW |>
+  mutate(pred_lower_odd_won = winner_odd_prob > loser_odd_prob
+    )
+matches_IW 
+```
+
+```{r}
+accuracy <- mean(matches_IW$pred_lower_odd_won)
+accuracy
+```
+
+
+
+
+betting odds 一列一列的测试，测出来之后，提出对应的两列 （winning and losing）再drop
+
+```{r}
+matches_IW <- matches_withoutMissing %>%
+  select(c(
+    Winner,Loser,IWW,IWL
+  ))
+```
+
+
+```{r}
+matches_IW
+```
+
+odd 越高 ， 输的可能性越大
+
+```{r}
+matches_IW <- matches_IW |>
+  mutate(LOWER_odd_win = IWW < IWL)
+```
+
+
+```{r}
+mean(matches_IW$LOWER_odd_win)
+```
+
+#### Calculate probability
+
+```{r}
+matches_IW <- matches_IW |>
+  mutate(winner_odd_prob = IWL/(IWW+IWL),
+         loser_odd_prob = IWW/(IWW+IWL))
+matches_IW 
+```
+
+### create bookmakers consensus model (BCM)
+1.Calculate each player's probability from each row marked as pk
+2.Aim: find each player's probability 
+    - Combine Winner and Loser into one column
+    - Combiner winner_odd_prob and loser_odd_prob into into one column
+3.Based on each player, calculate his average of logit (pk)
+4.Use logit function to calculate prob
+
+```{r}
+matches_IW <- matches_IW |>
+  mutate(pred_lower_odd_won = winner_odd_prob > loser_odd_prob
+    )
+matches_IW 
+```
+
+```{r}
+accuracy <- mean(matches_IW$pred_lower_odd_won)
+accuracy
+```

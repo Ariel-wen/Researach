@@ -1,0 +1,168 @@
+---
+title: "elo_surface_sep"
+author: "Yiwen Peng"
+date: "2024-04-10"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+pacman::p_load(tidyverse, lubridate, patchwork, knitr)
+```
+
+
+```{r}
+matches_SURFACE2 <- readRDS("E:/Ariel/adelaide/research/R/data/cleaned_matches.rds")
+players_SURFACE2 <- readRDS("E:/Ariel/adelaide/research/R/data/players.rds")
+```
+
+```{r}
+matches_SURFACE2
+```
+
+
+```{r}
+elo_k_surface2 <- function(k,matches_df,players_df,surface){
+  matches_df <- matches_df %>% 
+    filter(Surface == surface )
+  n <- nrow(matches_df)
+  for (i in 1:n){
+  Winner <-matches_df$Winner[i]
+  Loser <-matches_df$Loser[i]
+  # if the surface == input surface k =1.5k
+  #k_surface <- ifelse(matches_df$Surface[i] == surface, 1.5*k,k)
+  
+  diff_elo <-players_df[players_df$player == Loser,"Elo_score"][[1]] -  players_df[players_df$player == Winner,"Elo_score"][[1]]
+  
+  pi <- 1/ (1+10^(diff_elo/400))
+  
+  players_df[players_df$player == Winner,"Elo_score"] <- players_df[players_df$player == Winner,"Elo_score"] + (1 - pi) *  k
+  
+ matches_df$winner_ELO[i] <-players_df[players_df$player == Winner,"Elo_score"][[1]]
+  
+ matches_df$winner_prob_ELO[i] <- pi
+ matches_df$loser_prob_ELO[i] <- 1- pi
+ 
+  players_df[players_df$player == Loser,"Elo_score"] <- players_df[players_df$player == Loser,"Elo_score"] +( pi - 1) *  k
+  
+  matches_df$loser_ELO[i] <-players_df[players_df$player == Loser,"Elo_score"][[1]]
+  
+  }
+  return(list(matches_df = matches_df, players_df = players_df))
+}
+
+val <- function(matches_df){
+  split_time <- dmy("01-01-2017")
+  matches_train_df <- filter(matches_df, Date < split_time)
+  matches_test_df <- filter(matches_df, Date >= split_time)
+  N <- nrow(matches_test_df)
+  
+  preds_elo <- ifelse(matches_test_df$winner_prob_ELO > matches_test_df$loser_prob_ELO, 1, 0)
+  pi_test <- matches_test_df$winner_prob_ELO
+  #accuracy_logistic <- mean(preds_elo == matches_test_df$higher_elo_won)
+  accuracy <- mean(matches_test_df$winner_prob_ELO > matches_test_df$loser_prob_ELO)
+  #w <- matches_test_df$higher_elo_won
+  w<- preds_elo
+  #w <- preds_elo
+  log_loss_logistic <- -1 / N * sum(w * log(pi_test) +
+  (1 - w) * log(1 - pi_test), na.rm = T)
+  calibration_logistic <- sum(pi_test) / sum(w)
+  
+    
+  val <- tibble(model = paste0("Elo_k=",k), pred_acc = accuracy,log_loss = log_loss_logistic, calibration = calibration_logistic)
+  return(val)
+}
+
+
+```
+
+```{r}
+k <- 25
+types <- c("Hard", "Carpet","Clay", "Grass")
+tibbles_surface <- list()
+for (variable in types) {
+  matches_SURFACE2 <- readRDS("E:/Ariel/adelaide/research/R/data/cleaned_matches.rds")
+  players_SURFACE2 <- readRDS("E:/Ariel/adelaide/research/R/data/players.rds")
+  tibble_name <- paste0("tibble",variable)
+  tibbles_surface[[tibble_name]] <- elo_k_surface2(k,matches_SURFACE2,players_SURFACE2,variable)
+}
+```
+
+```{r}
+overall_elo <- matches_df_k_constant %>%
+  rename(overall_winner_ELO = winner_ELO ,
+         overall_loser_ELO = loser_ELO,
+         over_winner_prob_ELO = winner_prob_ELO,
+         overall_loser_prob_ELO = loser_prob_ELO)
+
+overall_elo
+```
+
+```{r}
+elo_bh <- function(tibble1,tibble2,surface) {
+  tibble1 <- tibble1 %>%
+    filter(Surface == surface) %>%
+    select("overall_winner_ELO":"overall_loser_prob_ELO")
+  res <- cbind(tibble2,tibble1)
+  return(res)
+  
+}
+```
+
+
+```{r}
+tibble_Hard <- tibbles_surface$tibbleHard$matches_df
+tibble_Hard2 <- tibble_Hard %>% 
+  rename(winner_ELO_HARD = winner_ELO,
+         loser_ELO_HARD = loser_ELO,
+         winner_prob_ELO_HARD = winner_prob_ELO,
+         loser_prob_ELO_HARD = loser_prob_ELO)
+tibble_Hard
+tibble_Hard_val <- val(tibble_Hard)
+tibble_Hard_val
+```
+
+
+```{r}
+elo_bh(overall_elo,tibble_Hard2,"Hard")
+```
+
+
+
+```{r}
+tibble_Carpet <- tibbles_surface$tibbleCarpet$matches_df
+tibble_Carpet 
+tibble_Carpet_val <- val(tibble_Carpet)
+tibble_Carpet_val
+```
+
+
+
+Carpet 只到2009年
+```{r}
+tibble_Clay <- tibbles_surface$tibbleClay$matches_df
+tibble_Clay
+tibble_Clay_val <- val(tibble_Clay)
+tibble_Clay_val
+```
+
+```{r}
+tibble_Grass <- tibbles_surface$tibbleGrass$matches_df
+tibble_Grass
+tibble_Grass_val <- val(tibble_Grass)
+tibble_Grass_val
+```
+
+
+
+```{r}
+tibble_comb <- rbind(tibble_Hard,tibble_Carpet,tibble_Clay,tibble_Grass) %>%
+  arrange(Date)
+```
+
+```{r}
+tibble_comb
+```

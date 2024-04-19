@@ -1,0 +1,23 @@
+---
+title: "ELO"
+author: "Yiwen Peng"
+date: "2024-04-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+1. player information FINISHED
+2. tune parameter
+3. depend on time 
+  1.根据时间分，把时间分成 2000 - 2019，train, 2020,2021,2022,2023,2024,mathch_df_时间, players_df_时间
+4. take into surface
+  1. 把每个分组 只算特定surface
+  2. 把特定surface 权重调高
+5. wining set 调整Elo权重
+
+```{r}
+pacman::p_load(tidyverse, lubridate, patchwork, knitr)
+```
