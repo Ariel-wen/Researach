@@ -1,0 +1,429 @@
+---
+title: "function"
+output: html_document
+date: "2024-04-12"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+pacman::p_load(tidyverse, lubridate, patchwork, knitr)
+```
+
+
+elo k constant
+```{r }
+k<-25
+elo_k <- function(k,matches_df,players_df){
+  n <- nrow(matches_df)
+  for (i in 1:n){
+  Winner <-matches_df$Winner[i]
+  Loser <-matches_df$Loser[i]
+  
+  diff_elo <-players_df[players_df$player == Loser,"Elo_score"][[1]] -  players_df[players_df$player == Winner,"Elo_score"][[1]]
+  
+  pi <- 1/ (1+10^(diff_elo/400))
+  matches_df$winner_ELO[i] <-players_df[players_df$player == Winner,"Elo_score"][[1]]
+
+  players_df[players_df$player == Winner,"Elo_score"] <- players_df[players_df$player == Winner,"Elo_score"] + (1 - pi) * k
+  
+    
+  matches_df$winner_prob_ELO[i] <- pi
+  matches_df$loser_prob_ELO[i] <- 1- pi
+ 
+   matches_df$loser_ELO[i] <-players_df[players_df$player == Loser,"Elo_score"][[1]]
+  players_df[players_df$player == Loser,"Elo_score"] <- players_df[players_df$player == Loser,"Elo_score"] +( pi - 1) * k
+  
+  
+  }
+  return(list(matches_df = matches_df, players_df = players_df))
+}
+
+
+
+```
+
+elo k contant with covriate
+
+```{r }
+k<-25
+c<-1.5
+elo_k_cov <- function(k,c,matches_df,players_df){
+  n <- nrow(matches_df)
+  for (i in 1:n){
+  Winner <-matches_df$Winner[i]
+  Loser <-matches_df$Loser[i]
+  
+  diff_elo <-players_df[players_df$player == Loser,"Elo_score"][[1]] -  players_df[players_df$player == Winner,"Elo_score"][[1]]
+  
+  pi <- 1/ (1+10^(diff_elo/400))
+  
+  Tournament <- matches_df$Tournament[i]
+  kc <- ifelse(Tournament == "Grand Slams", k*c,k)
+  
+  matches_df$winner_ELO[i] <-players_df[players_df$player == Winner,"Elo_score"][[1]]
+  players_df[players_df$player == Winner,"Elo_score"] <- players_df[players_df$player == Winner,"Elo_score"] + (1 - pi) * kc
+  
+    
+  matches_df$winner_prob_ELO[i] <- pi
+  matches_df$loser_prob_ELO[i] <- 1- pi
+ 
+   matches_df$loser_ELO[i] <-players_df[players_df$player == Loser,"Elo_score"][[1]]
+  players_df[players_df$player == Loser,"Elo_score"] <- players_df[players_df$player == Loser,"Elo_score"] +( pi - 1) * kc
+  
+  
+  }
+  return(list(matches_df = matches_df, players_df = players_df))
+}
+
+
+
+```
+
+
+ELO FTE 
+```{r}
+elo_FTE <- function(delta,nu,sigma,matches_df,players_df){
+  n <- nrow(matches_df)
+  for (i in 1:n){
+  # CALCULATE K_FACTOR 
+  # set default value
+  # delta <- 100
+  # nu <- 5
+  # sigma <- 0.1
+  #  Grandslam adjustment factor
+  #C <- 1.1 
+  # set winner id
+  Winner <- matches_df$Winner[i]
+  # set loser id
+  Loser <- matches_df$Loser[i]
+  # # add time = time + 1
+  # players_df_FTE[players_df_FTE$player == Winner,"t_times"] <- m_winner + 1
+  # 
+  # players_df_FTE[players_df_FTE$player == Loser,"t_times"] <- m_loser + 1
+  
+  # set winner play times
+  m_winner <- subset(players_df, player == Winner)$t_times
+  # set winnner k
+  k_winner <- delta/(m_winner + nu)^sigma
+  # set loser play times
+  m_loser <- subset(players_df,player == Loser)$t_times
+  # set loser k
+   k_loser <- delta/(m_loser + nu)^sigma
+  # # If Grandslam, k_winner = c * k_winner
+  #  level <- matches_df_FTE$tourney_level[i]
+   #k_winner <- ifelse(level == 'G',C * k_winner,k_winner)
+  diff_elo <-players_df[players_df$player == Loser,"Elo_score"][[1]] -  players_df[players_df$player == Winner,"Elo_score"][[1]]
+  
+  pi <- 1/ (1+10^(diff_elo/400))
+  
+  # UPDATE PROBABILITY
+  matches_df$winner_prob_ELO[i] <- pi
+  matches_df$loser_prob_ELO[i] <- 1 - pi
+  
+  # update winner elo
+  matches_df$winner_ELO[i] <-players_df[players_df$player == Winner,"Elo_score"][[1]]
+
+  players_df[players_df$player == Winner,"Elo_score"] <- players_df[players_df$player == Winner,"Elo_score"] + (1 - pi) * k_winner
+  
+ 
+  #update loser elo
+  matches_df$loser_ELO[i] <-players_df[players_df$player == Loser,"Elo_score"][[1]]
+
+  players_df[players_df$player == Loser,"Elo_score"] <- players_df[players_df$player == Loser,"Elo_score"] +(pi - 1) * k_loser
+  
+  #matches_df$diff_elo <- diff_elo
+  
+  # # add time = time + 1
+
+  players_df[players_df$player == Winner,"t_times"] <- m_winner + 1
+
+  players_df[players_df$player == Loser,"t_times"] <- m_loser + 1
+  
+}
+  return(list(matches_df = matches_df, players_df = players_df))
+}
+
+```
+
+elo fte cov
+
+```{r}
+c <- 1.5
+elo_FTE_cov <- function(delta,nu,sigma,c,matches_df,players_df){
+  n <- nrow(matches_df)
+  for (i in 1:n){
+  # CALCULATE K_FACTOR 
+  # set default value
+  # delta <- 100
+  # nu <- 5
+  # sigma <- 0.1
+  #  Grandslam adjustment factor
+  #C <- 1.1 
+    
+  Tournament <- matches_df$Tournament[i]
+  # set winner id
+  Winner <- matches_df$Winner[i]
+  # set loser id
+  Loser <- matches_df$Loser[i]
+  # # add time = time + 1
+  # players_df_FTE[players_df_FTE$player == Winner,"t_times"] <- m_winner + 1
+  # 
+  # players_df_FTE[players_df_FTE$player == Loser,"t_times"] <- m_loser + 1
+  
+  # set winner play times
+  m_winner <- subset(players_df, player == Winner)$t_times
+  # set winnner k
+  k_winner <- delta/(m_winner + nu)^sigma
+  k_winner_c <- ifelse(Tournament == "Grand Slams", k_winner *c, k_winner)
+  # set loser play times
+  m_loser <- subset(players_df,player == Loser)$t_times
+  # set loser k
+   k_loser <- delta/(m_loser + nu)^sigma
+   k_loser_c <- ifelse(Tournament == "Grand Slams", k_loser *c, k_loser)
+
+  # # If Grandslam, k_winner = c * k_winner
+  #  level <- matches_df_FTE$tourney_level[i]
+   #k_winner <- ifelse(level == 'G',C * k_winner,k_winner)
+  diff_elo <-players_df[players_df$player == Loser,"Elo_score"][[1]] -  players_df[players_df$player == Winner,"Elo_score"][[1]]
+  
+  pi <- 1/ (1+10^(diff_elo/400))
+  
+  # UPDATE PROBABILITY
+  matches_df$winner_prob_ELO[i] <- pi
+  matches_df$loser_prob_ELO[i] <- 1 - pi
+  
+  # update winner elo
+  matches_df$winner_ELO[i] <-players_df[players_df$player == Winner,"Elo_score"][[1]]
+
+  players_df[players_df$player == Winner,"Elo_score"] <- players_df[players_df$player == Winner,"Elo_score"] + (1 - pi) * k_winner_c
+  
+ 
+  #update loser elo
+  matches_df$loser_ELO[i] <-players_df[players_df$player == Loser,"Elo_score"][[1]]
+
+  players_df[players_df$player == Loser,"Elo_score"] <- players_df[players_df$player == Loser,"Elo_score"] +(pi - 1) * k_loser_c
+  
+  #matches_df$diff_elo <- diff_elo
+  
+  # # add time = time + 1
+
+  players_df[players_df$player == Winner,"t_times"] <- m_winner + 1
+
+  players_df[players_df$player == Loser,"t_times"] <- m_loser + 1
+  
+}
+  return(list(matches_df = matches_df, players_df = players_df))
+}
+
+```
+
+
+
+
+
+measure performance elo
+
+```{r}
+val <- function(matches_df,eloName){
+  split_time <- dmy("01-01-2017")
+  matches_train_df <- filter(matches_df, Date < split_time)
+  matches_test_df <- filter(matches_df, Date >= split_time)
+  N <- nrow(matches_test_df)
+  
+  preds_elo <- ifelse(matches_test_df$winner_prob_ELO > matches_test_df$loser_prob_ELO, 1, 0)
+  pi_test <- matches_test_df$winner_prob_ELO
+  #accuracy_logistic <- mean(preds_elo == matches_test_df$higher_elo_won)
+  accuracy <- mean(matches_test_df$winner_prob_ELO > matches_test_df$loser_prob_ELO)
+  #w <- matches_test_df$higher_elo_won
+  w<- preds_elo
+  #w <- preds_elo
+  log_loss_logistic <- -1 / N * sum(w * log(pi_test) +
+  (1 - w) * log(1 - pi_test), na.rm = T)
+  calibration_logistic <- sum(pi_test) / sum(w)
+  
+    
+  val <- tibble(model = eloName, pred_acc = accuracy,log_loss = log_loss_logistic, calibration = calibration_logistic)
+  return(val)
+}
+
+
+```
+
+
+surface
+
+
+```{r}
+elo_k_surface <- function(k,matches_df,players_df,surface){
+  n <- nrow(matches_df)
+  for (i in 1:n){
+  Winner <-matches_df$Winner[i]
+  Loser <-matches_df$Loser[i]
+  # if the surface == input surface k =1.5k
+  k_surface <- ifelse(matches_df$Surface[i] == surface, 1.5*k,k)
+  
+  diff_elo <-players_df[players_df$player == Loser,"Elo_score"][[1]] -  players_df[players_df$player == Winner,"Elo_score"][[1]]
+  
+  pi <- 1/ (1+10^(diff_elo/400))
+  
+  
+  matches_df$winner_ELO[i] <-players_df[players_df$player == Winner,"Elo_score"][[1]]
+  players_df[players_df$player == Winner,"Elo_score"] <- players_df[players_df$player == Winner,"Elo_score"] + (1 - pi) *  k_surface
+  
+  
+ matches_df$winner_prob_ELO[i] <- pi
+ matches_df$loser_prob_ELO[i] <- 1- pi
+ 
+  matches_df$loser_ELO[i] <-players_df[players_df$player == Loser,"Elo_score"][[1]]
+  players_df[players_df$player == Loser,"Elo_score"] <- players_df[players_df$player == Loser,"Elo_score"] +( pi - 1) *  k_surface
+  
+  
+  }
+  return(list(matches_df = matches_df, players_df = players_df))
+}
+
+```
+
+
+
+```{r}
+elo_k_surface2 <- function(k,matches_df,players_df,surface){
+  matches_df <- matches_df %>% 
+    filter(Surface == surface )
+  n <- nrow(matches_df)
+  for (i in 1:n){
+  Winner <-matches_df$Winner[i]
+  Loser <-matches_df$Loser[i]
+  # if the surface == input surface k =1.5k
+  #k_surface <- ifelse(matches_df$Surface[i] == surface, 1.5*k,k)
+  
+  diff_elo <-players_df[players_df$player == Loser,"Elo_score"][[1]] -  players_df[players_df$player == Winner,"Elo_score"][[1]]
+  
+  pi <- 1/ (1+10^(diff_elo/400))
+  
+  matches_df$winner_ELO[i] <-players_df[players_df$player == Winner,"Elo_score"][[1]]
+  players_df[players_df$player == Winner,"Elo_score"] <- players_df[players_df$player == Winner,"Elo_score"] + (1 - pi) *  k
+  
+  
+ matches_df$winner_prob_ELO[i] <- pi
+ matches_df$loser_prob_ELO[i] <- 1- pi
+ 
+  matches_df$loser_ELO[i] <-players_df[players_df$player == Loser,"Elo_score"][[1]]
+  players_df[players_df$player == Loser,"Elo_score"] <- players_df[players_df$player == Loser,"Elo_score"] +( pi - 1) *  k
+  
+  
+  }
+  return(list(matches_df = matches_df, players_df = players_df))
+}
+```
+
+
+
+```{r}
+elo_bh <- function(tibble1,tibble2,surface) {
+  tibble1 <- tibble1 %>%
+    filter(Surface == surface) %>%
+    select("overall_winner_ELO","overall_loser_ELO")
+  tibble2 <- tibble2 %>% 
+    select("Date","Surface","Winner","Loser","winner_ELO","loser_ELO")
+  res <- cbind(tibble2,tibble1)
+  res <- res %>% 
+    mutate(winner_ELO_BH = 0.5*overall_winner_ELO + 0.5*winner_ELO,
+           loser_ELO_BH = 0.5*overall_loser_ELO + 0.5*loser_ELO
+           ) %>%
+    mutate(
+      winner_prob_ELO = 1/ (1+10^((loser_ELO_BH - winner_ELO_BH)/400)),
+      loser_prob_ELO = 1 - (1/ (1+10^((loser_ELO_BH - winner_ELO_BH)/400)))
+    ) %>%
+    select("Date":"Loser","winner_ELO_BH":"loser_prob_ELO")
+
+  return(res)
+  
+}
+```
+
+
+winner set
+
+
+```{r }
+matches_df_win <- matches_df %>% 
+  mutate(diff_win = Wsets - Lsets
+         )
+matches_df_win
+```
+
+
+```{r }
+
+
+k<-25
+elo_k_ws <- function(k,matches_df,players_df){
+  n <- nrow(matches_df)
+  for (i in 1:n){
+  Winner <-matches_df$Winner[i]
+  Loser <-matches_df$Loser[i]
+  
+  diff_elo <-players_df[players_df$player == Loser,"Elo_score"][[1]] -  players_df[players_df$player == Winner,"Elo_score"][[1]]
+  # winner elo score
+  winner_elo <- players_df %>%
+    filter(player == Winner) %>%
+    pull(Elo_score)
+  # loser elo score
+  loser_elo <- players_df %>%
+    filter(player == Loser) %>%
+    pull(Elo_score)
+  # diff of match
+  diff_match <- matches_df$diff_win[i]
+  if(is.na(diff_match)){
+    diff_match <- 1
+  } else {
+    diff_match <- diff_match+1
+  }
+  # margin of victor multiplier 
+  mov <- log(diff_match + 3) * (2.2  / (abs(diff_elo)*0.001+2.2))
+  k_wd <- mov * k
+  
+  
+  pi <- 1/ (1+10^(diff_elo/400))
+  
+  #update probability
+  matches_df$winner_prob_ELO[i] <- pi
+  matches_df$loser_prob_ELO[i] <- 1- pi
+ 
+ 
+  
+  
+  #update winner elo
+  matches_df$winner_ELO[i] <-players_df[players_df$player == Winner,"Elo_score"][[1]]
+
+  players_df[players_df$player == Winner,"Elo_score"] <- players_df[players_df$player == Winner,"Elo_score"] + (1 - pi) * k_wd
+  
+  
+ 
+ # update loser elo
+  matches_df$loser_ELO[i] <-players_df[players_df$player == Loser,"Elo_score"][[1]]
+
+  players_df[players_df$player == Loser,"Elo_score"] <- players_df[players_df$player == Loser,"Elo_score"] +( pi - 1) * k_wd
+  
+  
+  }
+  return(list(matches_df = matches_df, players_df = players_df))
+}
+
+
+```
+
+
+
+
+```{r}
+
+```
+
+
+

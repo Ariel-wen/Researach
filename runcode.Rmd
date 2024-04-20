@@ -1,0 +1,286 @@
+---
+title: "RUNCODE"
+output:
+  word_document: default
+  html_document: default
+  pdf_document: default
+date: "2024-04-12"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+pacman::p_load(tidyverse, lubridate, patchwork, knitr)
+```
+
+```{r}
+matches_df <- readRDS("data/cleaned_matches.rds")
+players_df <- readRDS("data/players.rds")
+```
+
+
+
+```{r}
+k<-25
+result_elok <- elo_k(k,matches_df, players_df)
+```
+
+```{r}
+matches_KC <- result_elok$matches_df
+# matches_KC %>% 
+#   mutate(prob = 1/ (1+10^((loser_ELO - winner_ELO)/400)))
+
+val_kc <- val(matches_KC,"elo k=25")
+val_kc
+```
+
+k constaint cov
+
+```{r}
+k<-25
+c <- 1.5
+result_elok_cov <- elo_k_cov(k,c,matches_df, players_df)
+```
+
+```{r}
+matches_KC_cov <- result_elok_cov$matches_df
+# matches_KC %>% 
+#   mutate(prob = 1/ (1+10^((loser_ELO - winner_ELO)/400)))
+
+val_kc_cov <- val(matches_KC_cov,"elo k=25 with c = 1.5")
+val_kc_cov
+```
+
+
+
+
+```{r}
+delta <- 100
+nu <- 5
+sigma <- 0.1
+result <- elo_FTE(delta,nu,sigma,matches_df,players_df)
+```
+
+
+
+```{r}
+matches_FTE <- result$matches_df
+val_FTE <- val(matches_FTE,"elo fte")
+matches_FTE
+val_FTE
+```
+
+fte cov
+```{r}
+delta <- 100
+nu <- 5
+sigma <- 0.1
+c <- 1.5
+result_FTE_COV <- elo_FTE_cov(delta,nu,sigma,c,matches_df,players_df)
+```
+
+
+
+```{r}
+matches_FTE_COV <- result_FTE_COV$matches_df
+val_FTE_COV <- val(matches_FTE_COV,"elo fte WITH C = 1.5")
+matches_FTE_COV
+val_FTE_COV
+```
+
+
+
+      
+tune parameter
+
+```{r}
+
+deltas <- c(250,600,400)
+nus <- c(5,6,5)
+sigmas <- c(0.4,0.5,0.4)
+para<- list()
+FTE <- list()
+n <- length(deltas)
+for (i in 1:n) {
+  delta <- deltas[i]
+  nu <- nus[i]
+  sigma <- sigmas[i]
+  name <- paste0("FTE",i)
+  FTE[[name]] <- elo_FTE(delta,nu,sigma,matches_df,players_df)
+}
+#result <- elo_FTE(delta,nu,sigma,matches_df,players_df)
+
+
+```
+
+
+
+```{r}
+matches_FTE1 <- FTE$FTE1$matches_df
+matches_FTE1
+matches_FTE1_val1 <- val(matches_FTE1,"250,5,0.4")
+matches_FTE1_val1
+```
+
+```{r}
+matches_FTE2 <- FTE$FTE2$matches_df
+matches_FTE2
+matches_FTE1_val2 <- val(matches_FTE2,"600,6,0.5")
+matches_FTE1_val2
+```
+
+```{r}
+matches_FTE3 <- FTE$FTE3$matches_df
+matches_FTE3
+matches_FTE1_val3 <- val(matches_FTE3,"400,5,0.4")
+matches_FTE1_val3
+```
+
+used in surface
+```{r}
+overall_elo <- matches_KC %>%
+  rename(overall_winner_ELO = winner_ELO ,
+         overall_loser_ELO = loser_ELO,
+         over_winner_prob_ELO = winner_prob_ELO,
+         overall_loser_prob_ELO = loser_prob_ELO)
+
+overall_elo
+```
+
+
+```{r}
+k <- 25
+types <- c("Hard", "Carpet","Clay", "Grass")
+tibbles_surface <- list()
+for (variable in types) {
+  tibble_name <- paste0("tibble",variable)
+  tibbles_surface[[tibble_name]] <- elo_k_surface2(k,matches_df,players_df,variable)
+}
+```     
+             
+```{r}
+tibble_Hard <- tibbles_surface$tibbleHard$matches_df
+# tibble_Hard2 <- tibble_Hard %>% 
+#   rename(winner_ELO_HARD = winner_ELO,
+#          loser_ELO_HARD = loser_ELO,
+#          winner_prob_ELO_HARD = winner_prob_ELO,
+#          loser_prob_ELO_HARD = loser_prob_ELO)
+tibble_Hard
+tibble_Hard_val <- val(tibble_Hard,"elo hard (only)")
+tibble_Hard_val
+```
+time up to 2009
+
+```{r}
+hard_bh <- elo_bh(overall_elo,tibble_Hard,"Hard")
+hard_bh
+hard_bh_val <- val(hard_bh,"hard bh")
+hard_bh_val
+```
+
+```{r}
+
+```
+
+
+```{r}
+tibble_Carpet <- tibbles_surface$tibbleCarpet$matches_df
+# tibble_Hard2 <- tibble_Hard %>% 
+#   rename(winner_ELO_HARD = winner_ELO,
+#          loser_ELO_HARD = loser_ELO,
+#          winner_prob_ELO_HARD = winner_prob_ELO,
+#          loser_prob_ELO_HARD = loser_prob_ELO)
+tibble_Carpet
+tibble_Carpet_val <- val(tibble_Carpet,"elo Carpet (only)")
+tibble_Carpet_val
+```
+
+
+```{r}
+Carpet_bh <- elo_bh(overall_elo,tibble_Carpet,"Carpet")
+Carpet_bh
+Carpet_bh_val <- val(Carpet_bh,"Carpet bh")
+Carpet_bh_val
+```
+
+```{r}
+tibble_Clay <- tibbles_surface$tibbleClay$matches_df
+# tibble_Hard2 <- tibble_Hard %>% 
+#   rename(winner_ELO_HARD = winner_ELO,
+#          loser_ELO_HARD = loser_ELO,
+#          winner_prob_ELO_HARD = winner_prob_ELO,
+#          loser_prob_ELO_HARD = loser_prob_ELO)
+tibble_Clay
+tibble_Clay_val <- val(tibble_Clay,"elo Clay (only)")
+tibble_Clay_val
+```
+
+
+```{r}
+Clay_bh <- elo_bh(overall_elo,tibble_Clay,"Clay")
+Clay_bh
+Clay_bh_val <- val(Clay_bh,"Clay bh")
+Clay_bh_val
+```
+
+
+```{r}
+tibble_Grass <- tibbles_surface$tibbleGrass$matches_df
+# tibble_Hard2 <- tibble_Hard %>% 
+#   rename(winner_ELO_HARD = winner_ELO,
+#          loser_ELO_HARD = loser_ELO,
+#          winner_prob_ELO_HARD = winner_prob_ELO,
+#          loser_prob_ELO_HARD = loser_prob_ELO)
+tibble_Grass
+tibble_Grass_val <- val(tibble_Grass,"elo Grass (only)")
+tibble_Grass_val
+```
+
+
+```{r}
+Grass_bh <- elo_bh(overall_elo,tibble_Grass,"Grass")
+Grass_bh
+Grass_bh_val <- val(Grass_bh,"Grass bh")
+Grass_bh_val
+```
+
+winner set
+```{r}
+result_wins <- elo_k_ws(k,matches_df_win,players_df)
+
+```
+
+
+
+
+```{r}
+matches_wins <- result_wins$matches_df
+matches_wins
+matches_wins_val <- val(matches_wins,"elo k win set")
+matches_wins_val
+```
+
+
+
+
+if we can have more detail information should be fine
+
+such as points in each set 
+
+```{r}
+```
+
+save environment
+```{r}
+save(list = ls(all.names = TRUE),file = "Environment.RData")
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
